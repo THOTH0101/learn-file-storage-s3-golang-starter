@@ -1,11 +1,10 @@
 package main
 
 import (
-	"encoding/base64"
-	"fmt"
 	"io"
-	"log"
+	"mime"
 	"net/http"
+	"os"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -34,22 +33,34 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	const maxMemory = 10 << 20
 	r.ParseMultipartForm(maxMemory)
 
-	file, header, err := r.FormFile("thumbnail")
+	file, _, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
 	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
-	if mediaType == "" {
+	mediaType, _, err := mime.ParseMediaType("Content-Type")
+	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
 		return
 	}
 
-	data, err := io.ReadAll(file)
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "File is not image file", nil)
+		return
+	}
+
+	assetPath := getAssetPath(videoID, mediaType)
+	assetResource, err := os.Create(cfg.getAssetDiskPath(assetPath))
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to parse image data", err)
+		respondWithError(w, http.StatusInternalServerError, "Unable to create file on server", err)
+		return
+	}
+	defer assetResource.Close()
+
+	if _, err := io.Copy(assetResource, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't copy file", err)
 		return
 	}
 
@@ -64,15 +75,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	base64Str := base64.StdEncoding.EncodeToString(data)
-	thbURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64Str)
-
-	dbVideo.ThumbnailURL = &thbURL
+	assetURL := cfg.getAssetURL(assetPath)
+	dbVideo.ThumbnailURL = &assetURL
 	if err := cfg.db.UpdateVideo(dbVideo); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
 
-	log.Println(*dbVideo.ThumbnailURL)
 	respondWithJSON(w, http.StatusOK, dbVideo)
 }
