@@ -13,6 +13,21 @@ import (
 	"strings"
 )
 
+func processVideoForFastStart(filePath string) (string, error) {
+	outputPath := filePath + ".processing"
+	args := []string{
+		"-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputPath,
+	}
+
+	cmd := exec.Command("ffmpeg", args...)
+	if err := cmd.Run(); err != nil {
+		os.Remove(outputPath)
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
 func getVideoPrefix(aspectRatio string) string {
 	switch aspectRatio {
 	case "16:9":
