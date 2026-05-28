@@ -1,13 +1,84 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+func getVideoPrefix(aspectRatio string) string {
+	switch aspectRatio {
+	case "16:9":
+		return "landscape"
+	case "9:16":
+		return "portrait"
+	default:
+		return "other"
+	}
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	args := []string{
+		"-v", "error",
+		"-print_format", "json",
+		"-show_streams",
+		"-select_streams", "v",
+		filePath,
+	}
+
+	cmd := exec.Command("ffprobe", args...)
+	var stdoutBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	type ffprobeOutput struct {
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+
+	var output ffprobeOutput
+	if err := json.Unmarshal(stdoutBuf.Bytes(), &output); err != nil {
+		return "", err
+	}
+
+	if len(output.Streams) == 0 {
+		return "", fmt.Errorf("no streams found in video file: %s", filePath)
+	}
+
+	width := output.Streams[0].Width
+	height := output.Streams[0].Height
+
+	if width == 0 || height == 0 {
+		return "", fmt.Errorf("invalid video dimensions: %dx%d", width, height)
+	}
+
+	ratio := float64(width) / float64(height)
+
+	const target16x9 = 16.0 / 9.0 // ~1.777
+	const target9x16 = 9.0 / 16.0 // ~0.562
+	const tolerance = 0.01
+
+	// Check if the calculated ratio is within the tolerance boundaries
+	if math.Abs(ratio-target16x9) <= tolerance {
+		return "16:9", nil
+	}
+	if math.Abs(ratio-target9x16) <= tolerance {
+		return "9:16", nil
+	}
+
+	return "other", nil
+}
 
 func (cfg apiConfig) ensureAssetsDir() error {
 	if _, err := os.Stat(cfg.assetsRoot); os.IsNotExist(err) {

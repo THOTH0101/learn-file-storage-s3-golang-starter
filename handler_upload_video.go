@@ -83,7 +83,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	fileKey := getAssetPath(mediaType)
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Invalid file type, video aspect ratio error", err)
+		return
+	}
+
+	prefix := getVideoPrefix(aspectRatio)
+	fileKey := fmt.Sprintf("%s/%s", prefix, getAssetPath(mediaType))
 	if _, err := cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(fileKey),
