@@ -11,29 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 )
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	parts := strings.Split(*video.VideoURL, ",")
-	if len(parts) != 2 {
-		return database.Video{}, fmt.Errorf("invalid video URL format in database; expected 'bucket,key', got: %s", video.VideoURL)
-	}
-
-	bucket := strings.TrimSpace(parts[0])
-	key := strings.TrimSpace(parts[1])
-	expiration := 1 * time.Hour
-
-	presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, expiration)
-	if err != nil {
-		return video, err
-	}
-
-	video.VideoURL = &presignedURL
-	return video, nil
-}
 
 func processVideoForFastStart(filePath string) (string, error) {
 	outputPath := filePath + ".processing"
