@@ -85,7 +85,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfg := apiConfig{
+	cfg := &apiConfig{
 		db:               db,
 		jwtSecret:        jwtSecret,
 		platform:         platform,
